@@ -248,9 +248,11 @@ def split_text(text: str, max_len: int = TEXT_CHUNK_SIZE) -> List[str]:
 
 
 def _format_multimodal_chunk(item: dict) -> Tuple[str, str, str]:
-    """Return (content, entity_name, original_type) for a multimodal item.
+    """Return (content, entity_base, original_type) for a multimodal item.
 
-    Uses the same templates as raganything/prompt.py.
+    *entity_base* is the type category (e.g. "image", "table") used to build
+    the final entity name like "Image_1".  Uses the same templates as
+    raganything/prompt.py.
     """
     item_type = item.get("type", "unknown")
     enhanced_caption = "[Requires LLM analysis]"
