@@ -18,7 +18,6 @@ import time
 import zipfile
 from pathlib import Path
 from typing import Any, Dict, List, Tuple
-from urllib.parse import urlencode
 from urllib.request import Request, urlopen
 
 logger = logging.getLogger(__name__)
@@ -38,8 +37,6 @@ LLM_API_KEY = os.environ.get("LLM_API_KEY", "")
 EMBED_BASE_URL = os.environ.get("EMBED_BASE_URL", "http://69.48.159.8:30007/v1")
 EMBED_MODEL = os.environ.get("EMBED_MODEL", "Nexus_Embedding_Model_seq_8192_embd_1024")
 EMBED_API_KEY = os.environ.get("EMBED_API_KEY", "")
-
-TEXT_CHUNK_SIZE = 1200
 
 # Chunk templates matching raganything/prompt.py
 IMAGE_CHUNK_TEMPLATE = (
@@ -261,47 +258,60 @@ def run_mineru_remote(
 
     try:
         with urlopen(req, timeout=600) as resp:
+            status = resp.status
             resp_data = resp.read()
             resp_content_type = resp.headers.get("Content-Type", "")
     except Exception as exc:
         raise RuntimeError(f"MinerU API request failed: {exc}") from exc
 
-    logger.info("MinerU API responded: %d bytes, Content-Type: %s",
-                len(resp_data), resp_content_type)
+    logger.info("MinerU API responded: HTTP %d, %d bytes, Content-Type: %s",
+                status, len(resp_data), resp_content_type)
+
+    if status != 200:
+        raw_out = output_dir / "error_response.bin"
+        raw_out.write_bytes(resp_data)
+        raise RuntimeError(
+            f"MinerU API returned HTTP {status}. Response saved to {raw_out}"
+        )
 
     # Handle ZIP response
     if zipfile.is_zipfile(io.BytesIO(resp_data)):
-        with zipfile.ZipFile(io.BytesIO(resp_data)) as zf:
-            zf.extractall(output_dir)
+        try:
+            with zipfile.ZipFile(io.BytesIO(resp_data)) as zf:
+                zf.extractall(output_dir)
+        except (zipfile.BadZipFile, OSError) as exc:
+            raise RuntimeError(f"Failed to extract MinerU ZIP response: {exc}") from exc
         logger.info("Extracted ZIP to %s (%d files)", output_dir,
                      len(list(output_dir.rglob("*"))))
     else:
-        # Might be plain JSON — try to parse and save
+        # Non-ZIP response — try to parse as JSON and save content_list
         try:
             result = json.loads(resp_data)
-            # If it's a content list, save it directly
-            stem = input_path.stem
-            json_out = output_dir / f"{stem}_content_list.json"
-            if isinstance(result, list):
-                with open(json_out, "w", encoding="utf-8") as fh:
-                    json.dump(result, fh, ensure_ascii=False, indent=2)
-            elif isinstance(result, dict) and "content_list" in result:
-                with open(json_out, "w", encoding="utf-8") as fh:
-                    json.dump(result["content_list"], fh, ensure_ascii=False, indent=2)
-            else:
-                # Save raw response for debugging
-                raw_out = output_dir / "raw_response.json"
-                with open(raw_out, "w", encoding="utf-8") as fh:
-                    json.dump(result, fh, ensure_ascii=False, indent=2)
-                logger.warning("Unexpected JSON response structure; saved to %s", raw_out)
         except json.JSONDecodeError:
             raw_out = output_dir / "raw_response.bin"
-            with open(raw_out, "wb") as fh:
-                fh.write(resp_data)
+            raw_out.write_bytes(resp_data)
             raise RuntimeError(
                 f"MinerU API returned non-ZIP, non-JSON response ({len(resp_data)} bytes). "
                 f"Saved to {raw_out}"
             )
+
+        # Normalize to content_list
+        content = (
+            result if isinstance(result, list)
+            else result.get("content_list") if isinstance(result, dict)
+            else None
+        )
+        stem = input_path.stem
+        if content is not None:
+            json_out = output_dir / f"{stem}_content_list.json"
+        else:
+            json_out = output_dir / "raw_response.json"
+            content = result
+            logger.warning("Unexpected JSON structure; saved to %s", json_out)
+
+        json_out.write_text(
+            json.dumps(content, ensure_ascii=False, indent=2), encoding="utf-8"
+        )
 
     logger.info("Remote MinerU processing complete.")
 
@@ -336,9 +346,7 @@ def call_llm(
         "temperature": temperature,
     }).encode()
 
-    headers = {
-        "Content-Type": "application/json",
-    }
+    headers = {"Content-Type": "application/json"}
     if api_key:
         headers["Authorization"] = f"Bearer {api_key}"
 
@@ -347,9 +355,16 @@ def call_llm(
     try:
         with urlopen(req, timeout=120) as resp:
             result = json.loads(resp.read())
-        return result["choices"][0]["message"]["content"]
+        content = result["choices"][0]["message"]["content"]
+        if not content:
+            logger.warning("LLM returned empty content")
+            return "[LLM returned empty response]"
+        return content
+    except (KeyError, IndexError, TypeError) as exc:
+        logger.warning("LLM response has unexpected schema: %s", exc)
+        return "[LLM analysis unavailable]"
     except Exception as exc:
-        logger.warning("LLM call failed: %s — returning placeholder", exc)
+        logger.warning("LLM call failed: %s", exc)
         return "[LLM analysis unavailable]"
 
 

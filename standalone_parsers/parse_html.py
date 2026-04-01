@@ -133,8 +133,7 @@ def main():
     try:
         pdf_path = convert_to_pdf_via_libreoffice(str(file_path), str(out_dir))
     except RuntimeError:
-        # Fallback: use weasyprint or simple text extraction
-        logger.warning("LibreOffice failed; falling back to direct text extraction from HTML")
+        logger.warning("LibreOffice failed; falling back to ReportLab text extraction from HTML")
         pdf_path = _html_to_pdf_fallback(str(file_path), str(out_dir))
 
     if args.remote:
