@@ -1,0 +1,82 @@
+{
+  "skills": [
+    {
+      "name": "rag-dev",
+      "description": "RAG-Anything development assistant",
+      "test_cases": [
+        {
+          "id": "rag-dev-architecture",
+          "prompt": "How does the document processing pipeline work in RAG-Anything? Walk me through the full flow from file input to stored entities.",
+          "expected_behavior": "Should describe the pipeline: Parser selection -> Content List generation -> separate_content() -> text insertion via LightRAG.ainsert() -> multimodal processing via modal processors -> entity extraction -> storage in KG and vector DBs. Should reference specific files: processor.py, parser.py, utils.py, modalprocessors.py.",
+          "assertions": [
+            "Mentions Parser base class and the 3 implementations (MinerU, Docling, PaddleOCR)",
+            "Describes content list format with type/text/image/table/equation blocks",
+            "Explains separate_content() splitting text from multimodal items",
+            "References LightRAG storage components (chunks_vdb, entities_vdb, knowledge graph)",
+            "Provides specific file paths and line references"
+          ]
+        },
+        {
+          "id": "rag-dev-debug",
+          "prompt": "My parsed documents are returning stale results even after I update the source PDF. How do I debug this?",
+          "expected_behavior": "Should identify the parse caching system in processor.py, explain cache key generation (file path + mtime + parser config), suggest checking cache invalidation, and show how to clear or bypass the cache.",
+          "assertions": [
+            "Identifies parse_cache KV storage namespace in processor.py",
+            "Explains cache key includes file modification time",
+            "Suggests cache may not be invalidating due to config or mtime issues",
+            "References _get_cached_result() and _store_cached_result() methods"
+          ]
+        },
+        {
+          "id": "rag-dev-config",
+          "prompt": "How do I configure RAG-Anything to use Ollama for LLM and OpenAI for embeddings?",
+          "expected_behavior": "Should explain RAGAnythingConfig and lightrag_kwargs, reference env.example for environment variables, and show how to set LLM_BINDING=ollama with EMBEDDING_BINDING=openai.",
+          "assertions": [
+            "References config.py RAGAnythingConfig",
+            "Mentions environment variable overrides",
+            "Shows LLM_BINDING and EMBEDDING_BINDING configuration",
+            "References env.example for full config reference"
+          ]
+        }
+      ]
+    },
+    {
+      "name": "add-parser",
+      "description": "Scaffold new document parser",
+      "test_cases": [
+        {
+          "id": "add-parser-tesseract",
+          "prompt": "/add-parser tesseract",
+          "expected_behavior": "Should scaffold a TesseractParser class extending Parser, implementing parse_pdf(), parse_image(), parse_document(), and check_installation(). Should register in SUPPORTED_PARSERS and get_parser(). Should follow security practices for path validation.",
+          "assertions": [
+            "Creates TesseractParser class extending Parser",
+            "Implements all 4 abstract methods with correct signatures",
+            "Returns content list in standard format (type/text/img_path fields)",
+            "Registers in SUPPORTED_PARSERS tuple and get_parser() factory",
+            "Uses _unique_output_dir() for output directory creation",
+            "Validates paths against directory traversal"
+          ]
+        }
+      ]
+    },
+    {
+      "name": "add-processor",
+      "description": "Scaffold new modal processor",
+      "test_cases": [
+        {
+          "id": "add-processor-audio",
+          "prompt": "/add-processor audio",
+          "expected_behavior": "Should scaffold an AudioModalProcessor class extending BaseModalProcessor, add prompt templates to prompt.py, register in utils.py get_processor_for_type() and raganything.py _initialize_processors(), and add config toggle.",
+          "assertions": [
+            "Creates AudioModalProcessor extending BaseModalProcessor",
+            "Implements generate_description_only() with correct signature",
+            "Implements process_multimodal_content() calling _create_entity_and_chunk()",
+            "Adds AUDIO_ANALYSIS_SYSTEM and audio_prompt templates to prompt.py",
+            "Registers in get_processor_for_type() in utils.py",
+            "Adds enable_audio_processing config field in config.py"
+          ]
+        }
+      ]
+    }
+  ]
+}

@@ -76,5 +76,7 @@ memory-bank/
 
 # AI
 .claude/
+!.claude/commands/
+!.claude/commands/**
 .cursor/
 CLAUDE.md
