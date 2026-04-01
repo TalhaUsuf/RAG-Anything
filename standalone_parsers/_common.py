@@ -24,6 +24,43 @@ logger = logging.getLogger(__name__)
 
 TEXT_CHUNK_SIZE = 1200
 
+
+# ---------------------------------------------------------------------------
+# Load .env file (stdlib-only, no python-dotenv dependency)
+# ---------------------------------------------------------------------------
+
+def _load_dotenv() -> None:
+    """Load key=value pairs from .env file into os.environ.
+
+    Searches for .env in: cwd, script directory, script parent directory.
+    Skips comments (#) and blank lines. Does NOT override existing env vars.
+    """
+    search_dirs = [
+        Path.cwd(),
+        Path(__file__).resolve().parent,
+        Path(__file__).resolve().parent.parent,
+    ]
+    for d in search_dirs:
+        env_file = d / ".env"
+        if env_file.is_file():
+            logger.debug("Loading .env from %s", env_file)
+            with open(env_file, "r", encoding="utf-8") as f:
+                for line in f:
+                    line = line.strip()
+                    if not line or line.startswith("#"):
+                        continue
+                    if "=" not in line:
+                        continue
+                    key, _, value = line.partition("=")
+                    key = key.strip()
+                    value = value.strip().strip("'\"")
+                    if key and key not in os.environ:
+                        os.environ[key] = value
+            return
+
+
+_load_dotenv()
+
 # ── Remote MinerU API defaults ──────────────────────────────────────────────
 MINERU_API_URL = os.environ.get("MINERU_API_URL", "http://69.48.159.8:40050")
 MINERU_ENDPOINT = "/file_parse"
