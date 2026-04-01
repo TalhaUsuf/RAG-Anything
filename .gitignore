@@ -80,3 +80,5 @@ memory-bank/
 !.claude/commands/**
 .cursor/
 CLAUDE.md
+standalone_parsers/fresh_output/
+standalone_parsers/test_output/

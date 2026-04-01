@@ -1,0 +1,16 @@
+2026-04-01 12:38:45,899 [INFO] Converting sample_document.html to PDF ...
+2026-04-01 12:38:52,256 [INFO] Converted sample_document.html to PDF via libreoffice
+2026-04-01 12:38:52,256 [WARNING] LibreOffice failed; falling back to ReportLab text extraction from HTML
+2026-04-01 12:38:52,363 [INFO] HTML fallback PDF created: /home/user/RAG-Anything/standalone_parsers/fresh_output/sample_document_48846576/sample_document.pdf
+2026-04-01 12:38:52,366 [INFO] POSTing sample_document.pdf (4092 bytes) to http://69.48.159.8:40050/file_parse
+2026-04-01 12:38:54,256 [INFO] MinerU API responded: HTTP 200, 3025 bytes, Content-Type: application/zip
+2026-04-01 12:38:54,261 [INFO] Extracted ZIP to /home/user/RAG-Anything/standalone_parsers/fresh_output/sample_document_48846576/mineru (5 files)
+2026-04-01 12:38:54,261 [INFO] Remote MinerU processing complete.
+2026-04-01 12:38:54,262 [INFO] Reading MinerU output: /home/user/RAG-Anything/standalone_parsers/fresh_output/sample_document_48846576/mineru/sample_document/sample_document_content_list.json
+2026-04-01 12:38:54,262 [INFO] Loaded 3 content items.
+2026-04-01 12:38:54,262 [INFO] --- Summary ---
+2026-04-01 12:38:54,262 [INFO] Source file:       /home/user/RAG-Anything/standalone_parsers/test_samples/sample_document.html
+2026-04-01 12:38:54,262 [INFO] Total chunks:      1
+2026-04-01 12:38:54,262 [INFO]   Text chunks:     1
+2026-04-01 12:38:54,262 [INFO]   Multimodal:      0
+2026-04-01 12:38:54,262 [INFO] Output directory:  /home/user/RAG-Anything/standalone_parsers/fresh_output/sample_document_48846576
