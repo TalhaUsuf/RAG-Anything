@@ -9,6 +9,7 @@ No imports from the raganything package.
 """
 
 import argparse
+import html as html_mod
 import json
 import logging
 import os
@@ -35,7 +36,7 @@ TEXT_FORMATS = {".txt", ".md"}
 
 def _escape_xml(text: str) -> str:
     """Escape XML entities for ReportLab Paragraph elements."""
-    return text.replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;")
+    return html_mod.escape(text, quote=False)
 
 
 # ---------------------------------------------------------------------------
@@ -90,8 +91,8 @@ def convert_text_to_pdf(file_path: str, output_dir: str) -> Path:
         if os.path.exists(wqy_path):
             pdfmetrics.registerFont(TTFont("WenQuanYi", wqy_path))
             font_name = "WenQuanYi"
-    except Exception:
-        pass
+    except (ImportError, OSError) as exc:
+        logger.debug("Could not register WenQuanYi font: %s", exc)
 
     normal_style = ParagraphStyle(
         "NormalCustom", parent=styles["Normal"],
@@ -119,12 +120,14 @@ def convert_text_to_pdf(file_path: str, output_dir: str) -> Path:
                 )
                 try:
                     story.append(Paragraph(header_text, heading_style))
-                except Exception:
+                except Exception as exc:
+                    logger.debug("Heading style failed, using fallback: %s", exc)
                     story.append(Paragraph(header_text, styles["Normal"]))
             else:
                 try:
                     story.append(Paragraph(_escape_xml(stripped), normal_style))
-                except Exception:
+                except Exception as exc:
+                    logger.debug("Paragraph style failed, using fallback: %s", exc)
                     story.append(Paragraph(_escape_xml(stripped), styles["Normal"]))
     else:
         for line in lines:

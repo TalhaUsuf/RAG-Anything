@@ -352,20 +352,22 @@ def build_chunks(
 
 def print_summary(chunks: list, file_path, out_dir) -> None:
     """Log a human-readable summary of the generated chunks."""
-    text_chunks = [c for c in chunks if not c.get("is_multimodal")]
-    mm_chunks = [c for c in chunks if c.get("is_multimodal")]
+    text_count = mm_count = 0
+    types: dict[str, int] = {}
+    for c in chunks:
+        if c.get("is_multimodal"):
+            mm_count += 1
+            t = c.get("original_type", "unknown")
+            types[t] = types.get(t, 0) + 1
+        else:
+            text_count += 1
     logger.info("--- Summary ---")
     logger.info("Source file:       %s", file_path)
     logger.info("Total chunks:      %d", len(chunks))
-    logger.info("  Text chunks:     %d", len(text_chunks))
-    logger.info("  Multimodal:      %d", len(mm_chunks))
-    if mm_chunks:
-        types: dict[str, int] = {}
-        for c in mm_chunks:
-            t = c.get("original_type", "unknown")
-            types[t] = types.get(t, 0) + 1
-        for t, n in sorted(types.items()):
-            logger.info("    %-14s %d", t, n)
+    logger.info("  Text chunks:     %d", text_count)
+    logger.info("  Multimodal:      %d", mm_count)
+    for t, n in sorted(types.items()):
+        logger.info("    %-14s %d", t, n)
     logger.info("Output directory:  %s", out_dir)
 
 
@@ -418,12 +420,11 @@ def convert_to_pdf_via_libreoffice(source_path: str, output_dir: str) -> Path:
                 "Ensure LibreOffice is installed."
             )
 
-        pdfs = list(tmp_path.glob("*.pdf"))
-        if not pdfs:
+        pdf = next(tmp_path.glob("*.pdf"), None)
+        if pdf is None:
             raise RuntimeError(
                 f"No PDF generated for {source_path.name}"
             )
-        pdf = pdfs[0]
         if pdf.stat().st_size < 100:
             raise RuntimeError("Generated PDF appears empty or corrupt.")
 
