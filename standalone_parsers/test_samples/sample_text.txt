@@ -1,0 +1,15 @@
+Introduction to RAG Systems
+
+Retrieval-Augmented Generation (RAG) is a technique that combines information retrieval with text generation. Instead of relying solely on a language model's parametric knowledge, RAG systems first retrieve relevant documents from a knowledge base and then use those documents as context for generating responses.
+
+Key Components of RAG
+
+A typical RAG system consists of three main components: a document store, a retrieval mechanism, and a generation model. The document store holds the knowledge base, which can include text, images, tables, and other multimodal content. The retrieval mechanism uses embeddings and similarity search to find relevant documents. The generation model produces the final response using the retrieved context.
+
+Multimodal RAG
+
+RAG-Anything extends traditional RAG by supporting multimodal content. This includes images, tables, mathematical equations, and other non-text elements. Each content type is processed by a specialized modal processor that extracts entities and descriptions for the knowledge graph.
+
+Benefits and Applications
+
+RAG systems offer several advantages over pure generative models: reduced hallucination, up-to-date knowledge, source attribution, and domain-specific expertise. Applications include customer support, research assistance, document analysis, and enterprise knowledge management.

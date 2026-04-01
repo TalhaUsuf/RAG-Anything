@@ -19,6 +19,7 @@ from _common import (
     print_summary,
     read_mineru_output,
     run_mineru,
+    run_mineru_remote,
     separate_content,
     unique_output_dir,
 )
@@ -38,11 +39,7 @@ MINERU_NATIVE_FORMATS = {".png", ".jpeg", ".jpg"}
 # ---------------------------------------------------------------------------
 
 def convert_to_png(image_path: str, output_dir: str) -> Path:
-    """Convert non-native image formats to PNG for MinerU compatibility.
-
-    MinerU natively supports .png, .jpeg, .jpg.  For other formats
-    (.bmp, .tiff, .tif, .gif, .webp) we convert to PNG using PIL.
-    """
+    """Convert non-native image formats to PNG for MinerU compatibility."""
     from PIL import Image
 
     image_path = Path(image_path).resolve()
@@ -53,7 +50,6 @@ def convert_to_png(image_path: str, output_dir: str) -> Path:
 
     img = Image.open(image_path)
 
-    # Composite transparent / palette modes onto white background
     if img.mode in ("RGBA", "LA", "P"):
         if img.mode == "P":
             img = img.convert("RGBA")
@@ -87,6 +83,8 @@ def main():
     parser.add_argument("-b", "--backend", default=None, help="MinerU backend to use")
     parser.add_argument("-d", "--device", default=None, help="Device for MinerU (e.g. cpu, cuda)")
     parser.add_argument("--chunk-size", type=int, default=1200, help="Target text chunk size in chars (default: 1200)")
+    parser.add_argument("--remote", action="store_true", help="Use remote MinerU API instead of local CLI")
+    parser.add_argument("--use-llm", action="store_true", help="Use LLM for enhanced captions")
     args = parser.parse_args()
 
     file_path = Path(args.file).resolve()
@@ -103,17 +101,24 @@ def main():
     out_dir = unique_output_dir(base_output, file_path)
     out_dir.mkdir(parents=True, exist_ok=True)
 
-    # Step 1: Convert to PNG if needed
-    if suffix not in MINERU_NATIVE_FORMATS:
+    # Step 1: Convert to PNG if needed (for local CLI or non-native formats)
+    if suffix not in MINERU_NATIVE_FORMATS and not args.remote:
         logger.info("Format %s not natively supported by MinerU; converting to PNG ...", suffix)
         input_path = convert_to_png(str(file_path), str(out_dir))
     else:
         input_path = file_path
 
-    # Step 2: Run MinerU with OCR mode
+    # Step 2: Run MinerU
     mineru_output = out_dir / "mineru"
-    run_mineru(str(input_path), str(mineru_output), mode="ocr",
-               lang=args.lang, backend=args.backend, device=args.device)
+    if args.remote:
+        run_mineru_remote(
+            str(input_path), str(mineru_output),
+            parse_method="auto", lang=args.lang or "en",
+            backend=args.backend or "hybrid-auto-engine",
+        )
+    else:
+        run_mineru(str(input_path), str(mineru_output), mode="ocr",
+                   lang=args.lang, backend=args.backend, device=args.device)
 
     # Step 3: Read MinerU output
     content_list = read_mineru_output(str(mineru_output), input_path.stem)
@@ -123,7 +128,8 @@ def main():
     full_text, multimodal_items = separate_content(content_list)
 
     # Step 5: Build and output chunks
-    chunks = build_chunks(full_text, multimodal_items, str(file_path), chunk_size=args.chunk_size)
+    chunks = build_chunks(full_text, multimodal_items, str(file_path),
+                          chunk_size=args.chunk_size, use_llm=args.use_llm)
     print(json.dumps(chunks, indent=2, ensure_ascii=False))
     print_summary(chunks, file_path, out_dir)
 

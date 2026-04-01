@@ -6,16 +6,38 @@ parse_text.py, and parse_html.py so they aren't duplicated four times.
 """
 
 import hashlib
+import io
 import json
 import logging
+import mimetypes
 import os
 import queue
 import subprocess
 import threading
+import time
+import zipfile
 from pathlib import Path
 from typing import Any, Dict, List, Tuple
+from urllib.parse import urlencode
+from urllib.request import Request, urlopen
 
 logger = logging.getLogger(__name__)
+
+TEXT_CHUNK_SIZE = 1200
+
+# ── Remote MinerU API defaults ──────────────────────────────────────────────
+MINERU_API_URL = os.environ.get("MINERU_API_URL", "http://69.48.159.8:40050")
+MINERU_ENDPOINT = "/file_parse"
+
+# ── LLM defaults (OpenAI-compatible) ───────────────────────────────────────
+LLM_BASE_URL = os.environ.get("LLM_BASE_URL", "http://69.48.159.10:30000/v1")
+LLM_MODEL = os.environ.get("LLM_MODEL", "llama-3.1-70b")
+LLM_API_KEY = os.environ.get("LLM_API_KEY", "")
+
+# ── Embedding defaults ─────────────────────────────────────────────────────
+EMBED_BASE_URL = os.environ.get("EMBED_BASE_URL", "http://69.48.159.8:30007/v1")
+EMBED_MODEL = os.environ.get("EMBED_MODEL", "Nexus_Embedding_Model_seq_8192_embd_1024")
+EMBED_API_KEY = os.environ.get("EMBED_API_KEY", "")
 
 TEXT_CHUNK_SIZE = 1200
 
@@ -153,6 +175,219 @@ def run_mineru(
 
 
 # ---------------------------------------------------------------------------
+# Remote MinerU API
+# ---------------------------------------------------------------------------
+
+def run_mineru_remote(
+    input_path: str,
+    output_dir: str,
+    *,
+    parse_method: str = "auto",
+    lang: str = "en",
+    backend: str = "hybrid-auto-engine",
+    api_url: str | None = None,
+) -> None:
+    """POST a file to the remote MinerU HTTP API and extract the ZIP response.
+
+    The API returns a ZIP containing ``*_content_list.json``, markdown, and
+    images — the same layout that the local ``mineru`` CLI produces.
+    """
+    api_url = api_url or MINERU_API_URL
+    input_path = Path(input_path).resolve()
+    output_dir = Path(output_dir)
+    output_dir.mkdir(parents=True, exist_ok=True)
+
+    if not input_path.exists():
+        raise FileNotFoundError(f"File not found: {input_path}")
+
+    filename = input_path.name
+    content_type = mimetypes.guess_type(str(input_path))[0] or "application/octet-stream"
+
+    # Build multipart/form-data body
+    boundary = f"----MineruBoundary{hashlib.md5(str(time.time()).encode()).hexdigest()[:16]}"
+    body_parts: list[bytes] = []
+
+    form_fields = {
+        "return_middle_json": "true",
+        "return_model_output": "true",
+        "return_md": "true",
+        "return_images": "true",
+        "return_content_list": "true",
+        "response_format_zip": "true",
+        "table_enable": "true",
+        "formula_enable": "true",
+        "parse_method": parse_method,
+        "backend": backend,
+        "lang_list": lang,
+        "start_page_id": "0",
+        "end_page_id": "99999",
+        "output_dir": "./output",
+        "server_url": "string",
+    }
+
+    for key, value in form_fields.items():
+        body_parts.append(f"--{boundary}\r\n".encode())
+        body_parts.append(
+            f'Content-Disposition: form-data; name="{key}"\r\n'
+            f"Content-Type: text/plain\r\n\r\n"
+            f"{value}\r\n".encode()
+        )
+
+    # File field
+    body_parts.append(f"--{boundary}\r\n".encode())
+    body_parts.append(
+        f'Content-Disposition: form-data; name="files"; filename="{filename}"\r\n'
+        f"Content-Type: {content_type}\r\n\r\n".encode()
+    )
+    with open(input_path, "rb") as f:
+        body_parts.append(f.read())
+    body_parts.append(b"\r\n")
+    body_parts.append(f"--{boundary}--\r\n".encode())
+
+    body = b"".join(body_parts)
+
+    url = f"{api_url}{MINERU_ENDPOINT}"
+    logger.info("POSTing %s (%d bytes) to %s", filename, len(body), url)
+
+    req = Request(
+        url,
+        data=body,
+        headers={
+            "accept": "application/json",
+            "Content-Type": f"multipart/form-data; boundary={boundary}",
+        },
+        method="POST",
+    )
+
+    try:
+        with urlopen(req, timeout=600) as resp:
+            resp_data = resp.read()
+            resp_content_type = resp.headers.get("Content-Type", "")
+    except Exception as exc:
+        raise RuntimeError(f"MinerU API request failed: {exc}") from exc
+
+    logger.info("MinerU API responded: %d bytes, Content-Type: %s",
+                len(resp_data), resp_content_type)
+
+    # Handle ZIP response
+    if zipfile.is_zipfile(io.BytesIO(resp_data)):
+        with zipfile.ZipFile(io.BytesIO(resp_data)) as zf:
+            zf.extractall(output_dir)
+        logger.info("Extracted ZIP to %s (%d files)", output_dir,
+                     len(list(output_dir.rglob("*"))))
+    else:
+        # Might be plain JSON — try to parse and save
+        try:
+            result = json.loads(resp_data)
+            # If it's a content list, save it directly
+            stem = input_path.stem
+            json_out = output_dir / f"{stem}_content_list.json"
+            if isinstance(result, list):
+                with open(json_out, "w", encoding="utf-8") as fh:
+                    json.dump(result, fh, ensure_ascii=False, indent=2)
+            elif isinstance(result, dict) and "content_list" in result:
+                with open(json_out, "w", encoding="utf-8") as fh:
+                    json.dump(result["content_list"], fh, ensure_ascii=False, indent=2)
+            else:
+                # Save raw response for debugging
+                raw_out = output_dir / "raw_response.json"
+                with open(raw_out, "w", encoding="utf-8") as fh:
+                    json.dump(result, fh, ensure_ascii=False, indent=2)
+                logger.warning("Unexpected JSON response structure; saved to %s", raw_out)
+        except json.JSONDecodeError:
+            raw_out = output_dir / "raw_response.bin"
+            with open(raw_out, "wb") as fh:
+                fh.write(resp_data)
+            raise RuntimeError(
+                f"MinerU API returned non-ZIP, non-JSON response ({len(resp_data)} bytes). "
+                f"Saved to {raw_out}"
+            )
+
+    logger.info("Remote MinerU processing complete.")
+
+
+# ---------------------------------------------------------------------------
+# LLM integration (OpenAI-compatible)
+# ---------------------------------------------------------------------------
+
+def call_llm(
+    prompt: str,
+    *,
+    system_prompt: str = "You are a helpful assistant.",
+    base_url: str | None = None,
+    model: str | None = None,
+    api_key: str | None = None,
+    max_tokens: int = 1024,
+    temperature: float = 0.1,
+) -> str:
+    """Call an OpenAI-compatible chat completion endpoint using only stdlib."""
+    base_url = (base_url or LLM_BASE_URL).rstrip("/")
+    model = model or LLM_MODEL
+    api_key = api_key if api_key is not None else LLM_API_KEY
+    url = f"{base_url}/chat/completions"
+
+    payload = json.dumps({
+        "model": model,
+        "messages": [
+            {"role": "system", "content": system_prompt},
+            {"role": "user", "content": prompt},
+        ],
+        "max_tokens": max_tokens,
+        "temperature": temperature,
+    }).encode()
+
+    headers = {
+        "Content-Type": "application/json",
+    }
+    if api_key:
+        headers["Authorization"] = f"Bearer {api_key}"
+
+    req = Request(url, data=payload, headers=headers, method="POST")
+
+    try:
+        with urlopen(req, timeout=120) as resp:
+            result = json.loads(resp.read())
+        return result["choices"][0]["message"]["content"]
+    except Exception as exc:
+        logger.warning("LLM call failed: %s — returning placeholder", exc)
+        return "[LLM analysis unavailable]"
+
+
+def enhance_caption(item: dict, item_type: str) -> str:
+    """Use the LLM to generate an enhanced caption for a multimodal item."""
+    if item_type == "image":
+        prompt = (
+            f"Briefly describe this image content based on the available metadata.\n"
+            f"Image path: {item.get('img_path', item.get('image_path', 'N/A'))}\n"
+            f"Caption: {item.get('image_caption', 'N/A')}\n"
+            f"Footnote: {item.get('image_footnote', 'N/A')}\n"
+            f"Provide a concise analysis in 2-3 sentences."
+        )
+    elif item_type == "table":
+        prompt = (
+            f"Analyze this table data:\n"
+            f"Caption: {item.get('table_caption', 'N/A')}\n"
+            f"Body: {item.get('table_body', 'N/A')}\n"
+            f"Provide a concise summary of the table structure and key data in 2-3 sentences."
+        )
+    elif item_type == "equation":
+        prompt = (
+            f"Explain this mathematical equation:\n"
+            f"Equation: {item.get('text', item.get('equation', 'N/A'))}\n"
+            f"Format: {item.get('equation_format', 'latex')}\n"
+            f"Provide the mathematical meaning in 2-3 sentences."
+        )
+    else:
+        prompt = (
+            f"Analyze this content of type '{item_type}':\n"
+            f"{json.dumps(item, indent=2, default=str)}\n"
+            f"Provide a concise description in 2-3 sentences."
+        )
+
+    return call_llm(prompt, system_prompt="You are an expert content analyst.")
+
+
+# ---------------------------------------------------------------------------
 # Read and normalise MinerU output
 # ---------------------------------------------------------------------------
 
@@ -247,7 +482,7 @@ def split_text(text: str, max_len: int = TEXT_CHUNK_SIZE) -> List[str]:
     return chunks
 
 
-def _format_multimodal_chunk(item: dict) -> Tuple[str, str, str]:
+def _format_multimodal_chunk(item: dict, *, use_llm: bool = False) -> Tuple[str, str, str]:
     """Return (content, entity_base, original_type) for a multimodal item.
 
     *entity_base* is the type category (e.g. "image", "table") used to build
@@ -255,7 +490,10 @@ def _format_multimodal_chunk(item: dict) -> Tuple[str, str, str]:
     raganything/prompt.py.
     """
     item_type = item.get("type", "unknown")
-    enhanced_caption = "[Requires LLM analysis]"
+    if use_llm:
+        enhanced_caption = enhance_caption(item, item_type)
+    else:
+        enhanced_caption = "[Requires LLM analysis]"
 
     if item_type == "image":
         content = IMAGE_CHUNK_TEMPLATE.format(
@@ -299,6 +537,7 @@ def build_chunks(
     file_path: str,
     *,
     chunk_size: int = TEXT_CHUNK_SIZE,
+    use_llm: bool = False,
 ) -> List[Dict[str, Any]]:
     """Build chunk dicts for text and multimodal content."""
     # Document-level ID
@@ -328,7 +567,7 @@ def build_chunks(
     # --- multimodal chunks ---
     type_counters: dict[str, int] = {}
     for item in multimodal_items:
-        content, entity_base, original_type = _format_multimodal_chunk(item)
+        content, entity_base, original_type = _format_multimodal_chunk(item, use_llm=use_llm)
         type_counters[entity_base] = type_counters.get(entity_base, 0) + 1
         entity_name = f"{entity_base.title()}_{type_counters[entity_base]}"
 

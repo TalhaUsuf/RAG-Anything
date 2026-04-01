@@ -1,0 +1,34 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>RAG-Anything Documentation</title>
+</head>
+<body>
+    <h1>RAG-Anything: Multimodal RAG Framework</h1>
+
+    <h2>Introduction</h2>
+    <p>RAG-Anything is an all-in-one multimodal document processing and retrieval system. It processes documents containing diverse content types including text, images, tables, equations, and charts.</p>
+
+    <h2>Supported File Types</h2>
+    <table border="1">
+        <tr><th>Format</th><th>Parser</th><th>Method</th></tr>
+        <tr><td>PDF</td><td>MinerU</td><td>Direct</td></tr>
+        <tr><td>Images</td><td>MinerU/PaddleOCR</td><td>OCR</td></tr>
+        <tr><td>Office</td><td>Docling/LibreOffice</td><td>Native/Convert</td></tr>
+        <tr><td>HTML</td><td>Docling</td><td>Native</td></tr>
+    </table>
+
+    <h2>Query Modes</h2>
+    <ul>
+        <li><strong>Local</strong> - Vector similarity search</li>
+        <li><strong>Global</strong> - Graph-based entity retrieval</li>
+        <li><strong>Hybrid</strong> - Combined local + global</li>
+        <li><strong>Mix</strong> - Blended approach (default)</li>
+    </ul>
+
+    <h2>Getting Started</h2>
+    <p>Install RAG-Anything with pip: <code>pip install raganything</code></p>
+    <p>Configure your LLM and embedding functions, then call <code>process_document_complete()</code> to begin.</p>
+</body>
+</html>

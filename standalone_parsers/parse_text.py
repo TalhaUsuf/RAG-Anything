@@ -21,6 +21,7 @@ from _common import (
     print_summary,
     read_mineru_output,
     run_mineru,
+    run_mineru_remote,
     separate_content,
     unique_output_dir,
 )
@@ -161,6 +162,8 @@ def main():
         "output_dir", nargs="?", default="./output",
         help="Output directory (default: ./output)",
     )
+    parser.add_argument("--remote", action="store_true", help="Use remote MinerU API instead of local CLI")
+    parser.add_argument("--use-llm", action="store_true", help="Use LLM for enhanced captions")
     args = parser.parse_args()
 
     file_path = Path(args.file).resolve()
@@ -183,7 +186,10 @@ def main():
 
     # Step 2: Run MinerU
     mineru_output = out_dir / "mineru"
-    run_mineru(str(pdf_path), str(mineru_output))
+    if args.remote:
+        run_mineru_remote(str(pdf_path), str(mineru_output))
+    else:
+        run_mineru(str(pdf_path), str(mineru_output))
 
     # Step 3: Read MinerU output
     content_list = read_mineru_output(str(mineru_output), pdf_path.stem)
@@ -193,7 +199,7 @@ def main():
     full_text, multimodal_items = separate_content(content_list)
 
     # Step 5: Build and output chunks
-    chunks = build_chunks(full_text, multimodal_items, str(file_path))
+    chunks = build_chunks(full_text, multimodal_items, str(file_path), use_llm=args.use_llm)
     print(json.dumps(chunks, indent=2, ensure_ascii=False))
     print_summary(chunks, file_path, out_dir)
 
