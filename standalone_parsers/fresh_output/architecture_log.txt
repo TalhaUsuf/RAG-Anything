@@ -1,0 +1,22 @@
+2026-04-01 18:26:33,962 [INFO] Detected image references in markdown — extracting before PDF conversion
+2026-04-01 18:26:33,962 [INFO] Extracted markdown image: pipeline_diagram.png (alt: RAG-Anything Processing Pipeline)
+2026-04-01 18:26:33,962 [INFO] Extracted markdown image: measurement.png (alt: Measurement Dashboard Example)
+2026-04-01 18:26:33,962 [INFO] Extracted 2 image(s) from markdown
+2026-04-01 18:26:33,962 [INFO] Converting test_architecture_doc.md to PDF via ReportLab ...
+2026-04-01 18:26:34,038 [INFO] PDF created: /home/user/RAG-Anything/standalone_parsers/fresh_output/test_architecture_doc_d66b94b5/test_architecture_doc.pdf
+2026-04-01 18:26:34,041 [INFO] POSTing test_architecture_doc.pdf (6085 bytes) to http://69.48.159.8:40050/file_parse
+2026-04-01 18:26:41,433 [INFO] MinerU API responded: HTTP 200, 8823 bytes, Content-Type: application/zip
+2026-04-01 18:26:41,436 [INFO] Extracted ZIP to /home/user/RAG-Anything/standalone_parsers/fresh_output/test_architecture_doc_d66b94b5/mineru (5 files)
+2026-04-01 18:26:41,436 [INFO] Remote MinerU processing complete.
+2026-04-01 18:26:41,436 [INFO] Reading MinerU output: /home/user/RAG-Anything/standalone_parsers/fresh_output/test_architecture_doc_d66b94b5/mineru/test_architecture_doc/test_architecture_doc_content_list.json
+2026-04-01 18:26:41,436 [INFO] Loaded 28 content items from MinerU.
+2026-04-01 18:26:41,436 [INFO] Merged 2 markdown images + 3 MinerU multimodal items = 5 total
+2026-04-01 18:27:13,132 [INFO] --- Summary ---
+2026-04-01 18:27:13,132 [INFO] Source file:       /home/user/RAG-Anything/standalone_parsers/test_samples/test_architecture_doc.md
+2026-04-01 18:27:13,132 [INFO] Total chunks:      7
+2026-04-01 18:27:13,132 [INFO]   Text chunks:     2
+2026-04-01 18:27:13,132 [INFO]   Multimodal:      5
+2026-04-01 18:27:13,132 [INFO]     code           2
+2026-04-01 18:27:13,132 [INFO]     image          2
+2026-04-01 18:27:13,132 [INFO]     list           1
+2026-04-01 18:27:13,132 [INFO] Output directory:  /home/user/RAG-Anything/standalone_parsers/fresh_output/test_architecture_doc_d66b94b5

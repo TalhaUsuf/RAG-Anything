@@ -1,0 +1,21 @@
+2026-04-01 18:25:12,493 [INFO] Detected image references in markdown — extracting before PDF conversion
+2026-04-01 18:25:12,493 [INFO] Extracted markdown image: chart.png (alt: Quarterly Revenue Chart)
+2026-04-01 18:25:12,493 [INFO] Extracted markdown image: pipeline_diagram.png (alt: Processing Pipeline Diagram)
+2026-04-01 18:25:12,493 [INFO] Extracted 2 image(s) from markdown
+2026-04-01 18:25:12,493 [INFO] Converting test_business_report.md to PDF via ReportLab ...
+2026-04-01 18:25:12,734 [INFO] PDF created: /home/user/RAG-Anything/standalone_parsers/fresh_output/test_business_report_9887b72a/test_business_report.pdf
+2026-04-01 18:25:12,738 [INFO] POSTing test_business_report.pdf (5265 bytes) to http://69.48.159.8:40050/file_parse
+2026-04-01 18:25:16,124 [INFO] MinerU API responded: HTTP 200, 6065 bytes, Content-Type: application/zip
+2026-04-01 18:25:16,129 [INFO] Extracted ZIP to /home/user/RAG-Anything/standalone_parsers/fresh_output/test_business_report_9887b72a/mineru (5 files)
+2026-04-01 18:25:16,129 [INFO] Remote MinerU processing complete.
+2026-04-01 18:25:16,129 [INFO] Reading MinerU output: /home/user/RAG-Anything/standalone_parsers/fresh_output/test_business_report_9887b72a/mineru/test_business_report/test_business_report_content_list.json
+2026-04-01 18:25:16,129 [INFO] Loaded 19 content items from MinerU.
+2026-04-01 18:25:16,129 [INFO] Merged 2 markdown images + 1 MinerU multimodal items = 3 total
+2026-04-01 18:25:37,227 [INFO] --- Summary ---
+2026-04-01 18:25:37,227 [INFO] Source file:       /home/user/RAG-Anything/standalone_parsers/test_samples/test_business_report.md
+2026-04-01 18:25:37,227 [INFO] Total chunks:      4
+2026-04-01 18:25:37,227 [INFO]   Text chunks:     1
+2026-04-01 18:25:37,227 [INFO]   Multimodal:      3
+2026-04-01 18:25:37,227 [INFO]     image          2
+2026-04-01 18:25:37,227 [INFO]     list           1
+2026-04-01 18:25:37,227 [INFO] Output directory:  /home/user/RAG-Anything/standalone_parsers/fresh_output/test_business_report_9887b72a
