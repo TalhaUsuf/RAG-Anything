@@ -1,0 +1,14 @@
+2026-04-01 12:38:34,513 [INFO] Converting sample_text.txt to PDF via ReportLab ...
+2026-04-01 12:38:35,838 [INFO] PDF created: /home/user/RAG-Anything/standalone_parsers/fresh_output/sample_text_cdaf7b7f/sample_text.pdf
+2026-04-01 12:38:35,852 [INFO] POSTing sample_text.pdf (4479 bytes) to http://69.48.159.8:40050/file_parse
+2026-04-01 12:38:37,895 [INFO] MinerU API responded: HTTP 200, 4357 bytes, Content-Type: application/zip
+2026-04-01 12:38:37,902 [INFO] Extracted ZIP to /home/user/RAG-Anything/standalone_parsers/fresh_output/sample_text_cdaf7b7f/mineru (5 files)
+2026-04-01 12:38:37,902 [INFO] Remote MinerU processing complete.
+2026-04-01 12:38:37,903 [INFO] Reading MinerU output: /home/user/RAG-Anything/standalone_parsers/fresh_output/sample_text_cdaf7b7f/mineru/sample_text/sample_text_content_list.json
+2026-04-01 12:38:37,903 [INFO] Loaded 8 content items.
+2026-04-01 12:38:37,905 [INFO] --- Summary ---
+2026-04-01 12:38:37,905 [INFO] Source file:       /home/user/RAG-Anything/standalone_parsers/test_samples/sample_text.txt
+2026-04-01 12:38:37,905 [INFO] Total chunks:      2
+2026-04-01 12:38:37,905 [INFO]   Text chunks:     2
+2026-04-01 12:38:37,905 [INFO]   Multimodal:      0
+2026-04-01 12:38:37,905 [INFO] Output directory:  /home/user/RAG-Anything/standalone_parsers/fresh_output/sample_text_cdaf7b7f
