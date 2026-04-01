@@ -43,12 +43,128 @@ EMBED_BASE_URL = os.environ.get("EMBED_BASE_URL", "http://69.48.159.8:30007/v1")
 EMBED_MODEL = os.environ.get("EMBED_MODEL", "Nexus_Embedding_Model_seq_8192_embd_1024")
 EMBED_API_KEY = os.environ.get("EMBED_API_KEY", "")
 
-# Chunk templates matching raganything/prompt.py
+# ── Prompt templates matching raganything/prompt.py exactly ────────────────
+
+# System prompts
+IMAGE_ANALYSIS_SYSTEM = "You are an expert image analyst. Provide detailed, accurate descriptions."
+TABLE_ANALYSIS_SYSTEM = "You are an expert data analyst. Provide detailed table analysis with specific insights."
+EQUATION_ANALYSIS_SYSTEM = "You are an expert mathematician. Provide detailed mathematical analysis."
+
+# Vision prompt (without context) — prompt.py lines 32-57
+VISION_PROMPT = """Please analyze this image in detail and provide a JSON response with the following structure:
+
+{{
+    "detailed_description": "A comprehensive and detailed visual description of the image following these guidelines:
+    - Describe the overall composition and layout
+    - Identify all objects, people, text, and visual elements
+    - Explain relationships between elements
+    - Note colors, lighting, and visual style
+    - Describe any actions or activities shown
+    - Include technical details if relevant (charts, diagrams, etc.)
+    - Always use specific names instead of pronouns",
+    "entity_info": {{
+        "entity_name": "{entity_name}",
+        "entity_type": "image",
+        "summary": "concise summary of the image content and its significance (max 100 words)"
+    }}
+}}
+
+Additional context:
+- Image Path: {image_path}
+- Captions: {captions}
+- Footnotes: {footnotes}
+
+Focus on providing accurate, detailed visual analysis that would be useful for knowledge retrieval."""
+
+# Vision prompt (with context) — prompt.py lines 60-89
+VISION_PROMPT_WITH_CONTEXT = """Please analyze this image in detail, considering the surrounding context. Provide a JSON response with the following structure:
+
+{{
+    "detailed_description": "A comprehensive and detailed visual description of the image following these guidelines:
+    - Describe the overall composition and layout
+    - Identify all objects, people, text, and visual elements
+    - Explain relationships between elements and how they relate to the surrounding context
+    - Note colors, lighting, and visual style
+    - Describe any actions or activities shown
+    - Include technical details if relevant (charts, diagrams, etc.)
+    - Reference connections to the surrounding content when relevant
+    - Always use specific names instead of pronouns",
+    "entity_info": {{
+        "entity_name": "{entity_name}",
+        "entity_type": "image",
+        "summary": "concise summary of the image content, its significance, and relationship to surrounding content (max 100 words)"
+    }}
+}}
+
+Context from surrounding content:
+{context}
+
+Image details:
+- Image Path: {image_path}
+- Captions: {captions}
+- Footnotes: {footnotes}
+
+Focus on providing accurate, detailed visual analysis that incorporates the context and would be useful for knowledge retrieval."""
+
+# Table prompt — prompt.py lines 101-127
+TABLE_PROMPT = """Please analyze this table content and provide a JSON response with the following structure:
+
+{{
+    "detailed_description": "A comprehensive analysis of the table including:
+    - Table structure and organization
+    - Column headers and their meanings
+    - Key data points and patterns
+    - Statistical insights and trends
+    - Relationships between data elements
+    - Significance of the data presented
+    Always use specific names and values instead of general references.",
+    "entity_info": {{
+        "entity_name": "{entity_name}",
+        "entity_type": "table",
+        "summary": "concise summary of the table's purpose and key findings (max 100 words)"
+    }}
+}}
+
+Table Information:
+Image Path: {table_img_path}
+Caption: {table_caption}
+Body: {table_body}
+Footnotes: {table_footnote}
+
+Focus on extracting meaningful insights and relationships from the tabular data."""
+
+# Equation prompt — prompt.py lines 163-188
+EQUATION_PROMPT = """Please analyze this mathematical equation and provide a JSON response with the following structure:
+
+{{
+    "detailed_description": "A comprehensive analysis of the equation including:
+    - Mathematical meaning and interpretation
+    - Variables and their definitions
+    - Mathematical operations and functions used
+    - Application domain and context
+    - Physical or theoretical significance
+    - Relationship to other mathematical concepts
+    - Practical applications or use cases
+    Always use specific mathematical terminology.",
+    "entity_info": {{
+        "entity_name": "{entity_name}",
+        "entity_type": "equation",
+        "summary": "concise summary of the equation's purpose and significance (max 100 words)"
+    }}
+}}
+
+Equation Information:
+Equation: {equation_text}
+Format: {equation_format}
+
+Focus on providing mathematical insights and explaining the equation's significance."""
+
+# Chunk templates — prompt.py lines 274-300
 IMAGE_CHUNK_TEMPLATE = (
     "Image Content Analysis:\n"
     "Image Path: {image_path}\n"
     "Captions: {captions}\n"
-    "Footnotes: {footnotes}\n"
+    "Footnotes: {footnotes}\n\n"
     "Visual Analysis: {enhanced_caption}"
 )
 
@@ -427,6 +543,172 @@ def call_vlm(
         return "[Vision LLM analysis unavailable]"
 
 
+# ---------------------------------------------------------------------------
+# Context extraction (mirrors modalprocessors.py ContextExtractor)
+# ---------------------------------------------------------------------------
+
+def extract_context(
+    content_list: list[dict],
+    current_index: int,
+    *,
+    context_window: int = 1,
+    max_context_chars: int = 4000,
+) -> str:
+    """Extract surrounding text context for a multimodal item.
+
+    Collects text-type items from ±context_window pages around the current
+    item's page_idx, matching the original ContextExtractor page-mode behavior.
+    """
+    if not content_list or current_index < 0:
+        return ""
+
+    current_item = content_list[current_index] if current_index < len(content_list) else {}
+    current_page = current_item.get("page_idx", 0)
+    start_page = max(0, current_page - context_window)
+    end_page = current_page + context_window + 1
+
+    parts: list[str] = []
+    last_page = -1
+
+    for i, item in enumerate(content_list):
+        if i == current_index:
+            continue
+        item_page = item.get("page_idx", 0)
+        if not (start_page <= item_page < end_page):
+            continue
+        item_type = item.get("type", "text")
+
+        if item_type == "text":
+            text = item.get("text", "").strip()
+            if not text:
+                continue
+            if item_page != last_page and last_page >= 0:
+                parts.append(f"[Page {item_page}]")
+            last_page = item_page
+            text_level = item.get("text_level", 0)
+            if text_level and text_level > 0:
+                parts.append(f"{'#' * text_level} {text}")
+            else:
+                parts.append(text)
+        elif item_type == "image":
+            captions = item.get("image_caption", item.get("img_caption", []))
+            if captions:
+                cap_str = ", ".join(captions) if isinstance(captions, list) else str(captions)
+                parts.append(f"[Image: {cap_str}]")
+        elif item_type == "table":
+            captions = item.get("table_caption", [])
+            if captions:
+                cap_str = ", ".join(captions) if isinstance(captions, list) else str(captions)
+                parts.append(f"[Table: {cap_str}]")
+
+    context = "\n".join(parts)
+    if len(context) > max_context_chars:
+        # Truncate at sentence boundary
+        truncated = context[:max_context_chars]
+        last_period = truncated.rfind(".")
+        last_newline = truncated.rfind("\n")
+        cut = max(last_period, last_newline)
+        if cut > max_context_chars // 2:
+            context = truncated[:cut + 1]
+        else:
+            context = truncated
+
+    return context
+
+
+# ---------------------------------------------------------------------------
+# Robust JSON parsing (mirrors modalprocessors.py lines 547-693)
+# ---------------------------------------------------------------------------
+
+def robust_json_parse(response: str) -> dict:
+    """Parse LLM response as JSON using 4-strategy fallback.
+
+    1. Direct JSON parse
+    2. Basic cleanup (smart quotes, trailing commas) then parse
+    3. Progressive quote fix then parse
+    4. Regex field extraction as last resort
+    """
+    import re as _re
+
+    # Strategy 1: direct parse
+    # First extract all JSON candidates (handles reasoning model tags)
+    candidates = []
+    # Strip thinking tags for reasoning models
+    cleaned = _re.sub(r"<think>.*?</think>", "", response, flags=_re.DOTALL)
+    cleaned = _re.sub(r"```json\s*", "", cleaned)
+    cleaned = _re.sub(r"```\s*$", "", cleaned)
+
+    # Find all { ... } blocks
+    depth = 0
+    start = -1
+    for i, ch in enumerate(cleaned):
+        if ch == "{":
+            if depth == 0:
+                start = i
+            depth += 1
+        elif ch == "}":
+            depth -= 1
+            if depth == 0 and start >= 0:
+                candidates.append(cleaned[start:i + 1])
+                start = -1
+
+    for candidate in candidates:
+        try:
+            result = json.loads(candidate)
+            if isinstance(result, dict) and ("detailed_description" in result or "entity_info" in result):
+                return result
+        except json.JSONDecodeError:
+            pass
+
+    # Strategy 2: basic cleanup
+    for candidate in candidates:
+        fixed = candidate.replace("\u201c", '"').replace("\u201d", '"')
+        fixed = fixed.replace("\u2018", "'").replace("\u2019", "'")
+        fixed = _re.sub(r",\s*([}\]])", r"\1", fixed)
+        try:
+            result = json.loads(fixed)
+            if isinstance(result, dict):
+                return result
+        except json.JSONDecodeError:
+            pass
+
+    # Strategy 3: progressive quote fix
+    for candidate in candidates:
+        fixed = candidate.replace("\\", "\\\\").replace('\\"', '"')
+        try:
+            result = json.loads(fixed)
+            if isinstance(result, dict):
+                return result
+        except json.JSONDecodeError:
+            pass
+
+    # Strategy 4: regex extraction
+    desc_match = _re.search(r'"detailed_description"\s*:\s*"((?:[^"\\]|\\.)*)"', response)
+    name_match = _re.search(r'"entity_name"\s*:\s*"((?:[^"\\]|\\.)*)"', response)
+    type_match = _re.search(r'"entity_type"\s*:\s*"((?:[^"\\]|\\.)*)"', response)
+    summ_match = _re.search(r'"summary"\s*:\s*"((?:[^"\\]|\\.)*)"', response)
+
+    if desc_match:
+        return {
+            "detailed_description": desc_match.group(1),
+            "entity_info": {
+                "entity_name": name_match.group(1) if name_match else "unknown",
+                "entity_type": type_match.group(1) if type_match else "unknown",
+                "summary": summ_match.group(1) if summ_match else desc_match.group(1)[:100],
+            },
+        }
+
+    # Complete fallback: use raw response as description
+    return {
+        "detailed_description": response.strip(),
+        "entity_info": {
+            "entity_name": "unknown",
+            "entity_type": "unknown",
+            "summary": response.strip()[:100],
+        },
+    }
+
+
 def _encode_image_file(image_path: str) -> tuple[str, str]:
     """Read an image file and return (base64_data, mime_type)."""
     import base64
@@ -440,71 +722,86 @@ def _encode_image_file(image_path: str) -> tuple[str, str]:
 def enhance_caption(item: dict, item_type: str, context: str = "") -> str:
     """Use the appropriate LLM to generate an enhanced caption.
 
-    Images are sent to the Vision LLM with base64-encoded image data.
-    All other types use the text LLM.
+    Matches the original RAG-Anything behavior:
+    - Images → Vision LLM (InternVL3-38B) with base64 image + exact vision_prompt
+    - Tables → Text LLM with exact table_prompt
+    - Equations → Text LLM with exact equation_prompt
+    - Generic → Text LLM with generic prompt
+
+    Returns the detailed_description from the parsed JSON response.
+    Uses robust_json_parse() with 4-strategy fallback for response parsing.
     """
+    entity_name = "unique descriptive name"
+
     if item_type == "image":
         img_path = item.get("img_path", item.get("image_path", ""))
-        captions = item.get("image_caption", "N/A")
-        footnotes = item.get("image_footnote", "N/A")
+        captions = item.get("image_caption", item.get("img_caption", []))
+        footnotes = item.get("image_footnote", item.get("img_footnote", []))
+        cap_str = ", ".join(captions) if isinstance(captions, list) else str(captions or "None")
+        fn_str = ", ".join(footnotes) if isinstance(footnotes, list) else str(footnotes or "None")
 
-        prompt = (
-            "Please analyze this image in detail and provide a JSON response:\n"
-            '{"detailed_description": "comprehensive visual description",'
-            ' "entity_info": {"entity_name": "descriptive name",'
-            ' "entity_type": "image", "summary": "max 100 words"}}\n\n'
-            f"Image Path: {img_path}\n"
-            f"Captions: {captions}\nFootnotes: {footnotes}\n"
-        )
         if context:
-            prompt += f"\nContext from surrounding content:\n{context}\n"
+            prompt = VISION_PROMPT_WITH_CONTEXT.format(
+                entity_name=entity_name, image_path=img_path,
+                captions=cap_str, footnotes=fn_str, context=context,
+            )
+        else:
+            prompt = VISION_PROMPT.format(
+                entity_name=entity_name, image_path=img_path,
+                captions=cap_str, footnotes=fn_str,
+            )
 
-        # Try to send actual image to Vision LLM
+        # Send actual image to Vision LLM if available
         if img_path and Path(img_path).exists():
             try:
                 b64, mime = _encode_image_file(img_path)
-                return call_vlm(prompt, b64, image_mime=mime)
+                raw = call_vlm(prompt, b64, system_prompt=IMAGE_ANALYSIS_SYSTEM, image_mime=mime)
+                parsed = robust_json_parse(raw)
+                return parsed.get("detailed_description", raw)
             except Exception as exc:
-                logger.warning("Vision LLM failed for %s: %s — falling back to text LLM",
-                               img_path, exc)
+                logger.warning("Vision LLM failed for %s: %s — falling back to text LLM", img_path, exc)
 
-        # Fallback to text LLM if image not available
-        return call_llm(prompt, system_prompt="You are an expert image analyst.")
+        raw = call_llm(prompt, system_prompt=IMAGE_ANALYSIS_SYSTEM)
+        parsed = robust_json_parse(raw)
+        return parsed.get("detailed_description", raw)
 
     elif item_type == "table":
-        prompt = (
-            "Analyze this table content. Provide a JSON response:\n"
-            '{"detailed_description": "table structure, headers, data patterns, insights",'
-            ' "entity_info": {"entity_name": "name", "entity_type": "table",'
-            ' "summary": "max 100 words"}}\n\n'
-            f"Caption: {item.get('table_caption', 'N/A')}\n"
-            f"Body: {item.get('table_body', 'N/A')}\n"
-            f"Footnotes: {item.get('table_footnote', 'N/A')}\n"
+        table_img = item.get("img_path", "")
+        table_cap = item.get("table_caption", [])
+        table_body = item.get("table_body", item.get("text", ""))
+        table_fn = item.get("table_footnote", [])
+        cap_str = ", ".join(table_cap) if isinstance(table_cap, list) else str(table_cap or "None")
+        fn_str = ", ".join(table_fn) if isinstance(table_fn, list) else str(table_fn or "None")
+
+        prompt = TABLE_PROMPT.format(
+            entity_name=entity_name, table_img_path=table_img,
+            table_caption=cap_str, table_body=table_body, table_footnote=fn_str,
         )
-        if context:
-            prompt += f"\nContext:\n{context}\n"
-        return call_llm(prompt, system_prompt="You are an expert data analyst.")
+        raw = call_llm(prompt, system_prompt=TABLE_ANALYSIS_SYSTEM)
+        parsed = robust_json_parse(raw)
+        return parsed.get("detailed_description", raw)
 
     elif item_type == "equation":
-        prompt = (
-            "Analyze this equation. Provide a JSON response:\n"
-            '{"detailed_description": "meaning, variables, applications",'
-            ' "entity_info": {"entity_name": "name", "entity_type": "equation",'
-            ' "summary": "max 100 words"}}\n\n'
-            f"Equation: {item.get('text', item.get('equation', 'N/A'))}\n"
-            f"Format: {item.get('equation_format', 'latex')}\n"
+        eq_text = item.get("text", item.get("equation", ""))
+        eq_format = item.get("text_format", item.get("equation_format", "latex"))
+
+        prompt = EQUATION_PROMPT.format(
+            entity_name=entity_name, equation_text=eq_text, equation_format=eq_format,
         )
-        if context:
-            prompt += f"\nContext:\n{context}\n"
-        return call_llm(prompt, system_prompt="You are an expert mathematician.")
+        raw = call_llm(prompt, system_prompt=EQUATION_ANALYSIS_SYSTEM)
+        parsed = robust_json_parse(raw)
+        return parsed.get("detailed_description", raw)
 
     else:
+        system = f"You are an expert content analyst specializing in {item_type} content."
         prompt = (
-            f"Analyze this {item_type} content:\n"
-            f"{json.dumps(item, indent=2, default=str)}\n"
-            f"Provide a concise description in 2-3 sentences."
+            f"Analyze this {item_type} content and provide a JSON response with "
+            f'"detailed_description" and "entity_info" fields:\n\n'
+            f"{json.dumps(item, indent=2, default=str)}"
         )
-        return call_llm(prompt, system_prompt="You are an expert content analyst.")
+        raw = call_llm(prompt, system_prompt=system)
+        parsed = robust_json_parse(raw)
+        return parsed.get("detailed_description", raw)
 
 
 # ---------------------------------------------------------------------------
@@ -602,16 +899,22 @@ def split_text(text: str, max_len: int = TEXT_CHUNK_SIZE) -> List[str]:
     return chunks
 
 
-def _format_multimodal_chunk(item: dict, *, use_llm: bool = False) -> Tuple[str, str, str]:
+def _format_multimodal_chunk(
+    item: dict, *, use_llm: bool = False, context: str = "",
+) -> Tuple[str, str, str]:
     """Return (content, entity_base, original_type) for a multimodal item.
 
     *entity_base* is the type category (e.g. "image", "table") used to build
     the final entity name like "Image_1".  Uses the same templates as
     raganything/prompt.py.
+
+    When use_llm=True, calls the appropriate LLM (Vision for images, Text
+    for tables/equations) with the exact prompt templates from the original
+    codebase and parses the response with robust_json_parse().
     """
     item_type = item.get("type", "unknown")
     if use_llm:
-        enhanced_caption = enhance_caption(item, item_type)
+        enhanced_caption = enhance_caption(item, item_type, context=context)
     else:
         enhanced_caption = "[Requires LLM analysis]"
 
@@ -658,8 +961,14 @@ def build_chunks(
     *,
     chunk_size: int = TEXT_CHUNK_SIZE,
     use_llm: bool = False,
+    content_list: list | None = None,
 ) -> List[Dict[str, Any]]:
-    """Build chunk dicts for text and multimodal content."""
+    """Build chunk dicts for text and multimodal content.
+
+    If *content_list* is provided and *use_llm* is True, surrounding context
+    is extracted for each multimodal item (±1 page window) and passed to the
+    LLM prompt, matching the original ContextExtractor behavior.
+    """
     # Document-level ID
     sig_parts = [full_text]
     for item in multimodal_items:
@@ -685,9 +994,29 @@ def build_chunks(
         chunk_index += 1
 
     # --- multimodal chunks ---
+    # Build index mapping so we can find each item in content_list for context
+    item_to_cl_index: dict[int, int] = {}
+    if content_list and use_llm:
+        for mm_idx, mm_item in enumerate(multimodal_items):
+            for cl_idx, cl_item in enumerate(content_list):
+                if cl_item is mm_item or (
+                    cl_item.get("type") == mm_item.get("type")
+                    and cl_item.get("img_path") == mm_item.get("img_path")
+                    and cl_item.get("page_idx") == mm_item.get("page_idx")
+                ):
+                    item_to_cl_index[mm_idx] = cl_idx
+                    break
+
     type_counters: dict[str, int] = {}
-    for item in multimodal_items:
-        content, entity_base, original_type = _format_multimodal_chunk(item, use_llm=use_llm)
+    for mm_idx, item in enumerate(multimodal_items):
+        # Extract context if content_list available
+        ctx = ""
+        if use_llm and content_list and mm_idx in item_to_cl_index:
+            ctx = extract_context(content_list, item_to_cl_index[mm_idx])
+
+        content, entity_base, original_type = _format_multimodal_chunk(
+            item, use_llm=use_llm, context=ctx,
+        )
         type_counters[entity_base] = type_counters.get(entity_base, 0) + 1
         entity_name = f"{entity_base.title()}_{type_counters[entity_base]}"
 

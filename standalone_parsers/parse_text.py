@@ -282,7 +282,14 @@ def main():
                      len(md_image_items), len(mineru_multimodal), len(all_multimodal))
 
     # Step 6: Build chunks (images will be sent to Vision LLM if --use-llm)
-    chunks = build_chunks(full_text, all_multimodal, str(file_path), use_llm=args.use_llm)
+    # Build combined content_list for context extraction
+    # (MinerU items + markdown images merged so context can reference both)
+    combined_content_list = content_list + md_image_items
+
+    chunks = build_chunks(
+        full_text, all_multimodal, str(file_path),
+        use_llm=args.use_llm, content_list=combined_content_list,
+    )
     print(json.dumps(chunks, indent=2, ensure_ascii=False))
     print_summary(chunks, file_path, out_dir)
 
