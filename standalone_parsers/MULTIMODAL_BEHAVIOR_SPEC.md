@@ -9,14 +9,16 @@ data structure in `raganything/processor.py`, `raganything/modalprocessors.py`,
 
 ## Service Endpoints
 
-| Service | Base URL | Model | API Key |
-|---------|----------|-------|---------|
-| Remote MinerU | `http://69.48.159.8:40050` | — | — |
-| Text LLM | `http://69.48.159.10:30000/v1` | `llama-3.1-70b` | empty |
-| Vision LLM | `http://69.48.159.8:23333/v1` | `OpenGVLab/InternVL3-38B` | empty |
-| Embeddings | `http://69.48.159.8:30007/v1` | `Nexus_Embedding_Model_seq_8192_embd_1024` | empty |
+All endpoints are configured via the `.env` file (see `.env.example`):
 
-All are OpenAI-compatible HTTP APIs.
+| Env Variable | Service | Example Value |
+|-------------|---------|---------------|
+| `MINERU_API_URL` | Remote MinerU | `http://host:40050` |
+| `LLM_BASE_URL` / `LLM_MODEL` | Text LLM | OpenAI-compatible `/v1` endpoint |
+| `VLM_BASE_URL` / `VLM_MODEL` | Vision LLM | OpenAI-compatible multimodal endpoint |
+| `EMBED_BASE_URL` / `EMBED_MODEL` | Embeddings | OpenAI-compatible embedding endpoint |
+
+All are OpenAI-compatible HTTP APIs. No URLs are hardcoded in source code.
 
 ---
 

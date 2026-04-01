@@ -57,8 +57,8 @@ Set the following environment variables to configure the system:
 
 | Variable | Default | Description |
 |----------|---------|-------------|
-| MINERU_API_URL | http://69.48.159.8:40050 | Remote MinerU endpoint |
-| VLM_BASE_URL | http://69.48.159.8:23333/v1 | Vision LLM endpoint |
-| LLM_BASE_URL | http://69.48.159.10:30000/v1 | Text LLM endpoint |
-| EMBED_BASE_URL | http://69.48.159.8:30007/v1 | Embedding endpoint |
+| MINERU_API_URL | (see .env) | Remote MinerU endpoint |
+| VLM_BASE_URL | (see .env) | Vision LLM endpoint |
+| LLM_BASE_URL | (see .env) | Text LLM endpoint |
+| EMBED_BASE_URL | (see .env) | Embedding endpoint |
 | PARSER | mineru | Document parser selection |

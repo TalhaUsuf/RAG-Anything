@@ -62,22 +62,22 @@ def _load_dotenv() -> None:
 _load_dotenv()
 
 # ── Remote MinerU API defaults ──────────────────────────────────────────────
-MINERU_API_URL = os.environ.get("MINERU_API_URL", "http://69.48.159.8:40050")
+MINERU_API_URL = os.environ.get("MINERU_API_URL", "")
 MINERU_ENDPOINT = "/file_parse"
 
 # ── LLM defaults (OpenAI-compatible) ───────────────────────────────────────
-LLM_BASE_URL = os.environ.get("LLM_BASE_URL", "http://69.48.159.10:30000/v1")
-LLM_MODEL = os.environ.get("LLM_MODEL", "llama-3.1-70b")
+LLM_BASE_URL = os.environ.get("LLM_BASE_URL", "")
+LLM_MODEL = os.environ.get("LLM_MODEL", "")
 LLM_API_KEY = os.environ.get("LLM_API_KEY", "")
 
 # ── Vision LLM defaults (OpenAI-compatible multimodal) ────────────────────
-VLM_BASE_URL = os.environ.get("VLM_BASE_URL", "http://69.48.159.8:23333/v1")
-VLM_MODEL = os.environ.get("VLM_MODEL", "OpenGVLab/InternVL3-38B")
+VLM_BASE_URL = os.environ.get("VLM_BASE_URL", "")
+VLM_MODEL = os.environ.get("VLM_MODEL", "")
 VLM_API_KEY = os.environ.get("VLM_API_KEY", "")
 
 # ── Embedding defaults ─────────────────────────────────────────────────────
-EMBED_BASE_URL = os.environ.get("EMBED_BASE_URL", "http://69.48.159.8:30007/v1")
-EMBED_MODEL = os.environ.get("EMBED_MODEL", "Nexus_Embedding_Model_seq_8192_embd_1024")
+EMBED_BASE_URL = os.environ.get("EMBED_BASE_URL", "")
+EMBED_MODEL = os.environ.get("EMBED_MODEL", "")
 EMBED_API_KEY = os.environ.get("EMBED_API_KEY", "")
 
 # ── Prompt templates matching raganything/prompt.py exactly ────────────────
@@ -348,6 +348,10 @@ def run_mineru_remote(
     images — the same layout that the local ``mineru`` CLI produces.
     """
     api_url = api_url or MINERU_API_URL
+    if not api_url:
+        raise RuntimeError(
+            "MINERU_API_URL is not configured. Set it in .env or environment."
+        )
     input_path = Path(input_path).resolve()
     output_dir = Path(output_dir)
     output_dir.mkdir(parents=True, exist_ok=True)
@@ -492,6 +496,9 @@ def call_llm(
     base_url = (base_url or LLM_BASE_URL).rstrip("/")
     model = model or LLM_MODEL
     api_key = api_key if api_key is not None else LLM_API_KEY
+    if not base_url or not model:
+        logger.warning("LLM_BASE_URL or LLM_MODEL not configured — returning placeholder")
+        return "[LLM not configured]"
     url = f"{base_url}/chat/completions"
 
     payload = json.dumps({
@@ -542,6 +549,9 @@ def call_vlm(
     base_url = (base_url or VLM_BASE_URL).rstrip("/")
     model = model or VLM_MODEL
     api_key = api_key if api_key is not None else VLM_API_KEY
+    if not base_url or not model:
+        logger.warning("VLM_BASE_URL or VLM_MODEL not configured — returning placeholder")
+        return "[Vision LLM not configured]"
     url = f"{base_url}/chat/completions"
 
     payload = json.dumps({
