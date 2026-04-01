@@ -33,6 +33,11 @@ LLM_BASE_URL = os.environ.get("LLM_BASE_URL", "http://69.48.159.10:30000/v1")
 LLM_MODEL = os.environ.get("LLM_MODEL", "llama-3.1-70b")
 LLM_API_KEY = os.environ.get("LLM_API_KEY", "")
 
+# ── Vision LLM defaults (OpenAI-compatible multimodal) ────────────────────
+VLM_BASE_URL = os.environ.get("VLM_BASE_URL", "http://69.48.159.8:23333/v1")
+VLM_MODEL = os.environ.get("VLM_MODEL", "OpenGVLab/InternVL3-38B")
+VLM_API_KEY = os.environ.get("VLM_API_KEY", "")
+
 # ── Embedding defaults ─────────────────────────────────────────────────────
 EMBED_BASE_URL = os.environ.get("EMBED_BASE_URL", "http://69.48.159.8:30007/v1")
 EMBED_MODEL = os.environ.get("EMBED_MODEL", "Nexus_Embedding_Model_seq_8192_embd_1024")
@@ -368,38 +373,138 @@ def call_llm(
         return "[LLM analysis unavailable]"
 
 
-def enhance_caption(item: dict, item_type: str) -> str:
-    """Use the LLM to generate an enhanced caption for a multimodal item."""
+def call_vlm(
+    prompt: str,
+    image_base64: str,
+    *,
+    system_prompt: str = "You are an expert image analyst. Provide detailed, accurate descriptions.",
+    base_url: str | None = None,
+    model: str | None = None,
+    api_key: str | None = None,
+    max_tokens: int = 1024,
+    temperature: float = 0.1,
+    image_mime: str = "image/png",
+) -> str:
+    """Call a Vision LLM with base64 image using OpenAI-compatible multimodal format."""
+    base_url = (base_url or VLM_BASE_URL).rstrip("/")
+    model = model or VLM_MODEL
+    api_key = api_key if api_key is not None else VLM_API_KEY
+    url = f"{base_url}/chat/completions"
+
+    payload = json.dumps({
+        "model": model,
+        "messages": [
+            {"role": "system", "content": system_prompt},
+            {"role": "user", "content": [
+                {"type": "text", "text": prompt},
+                {"type": "image_url", "image_url": {
+                    "url": f"data:{image_mime};base64,{image_base64}",
+                }},
+            ]},
+        ],
+        "max_tokens": max_tokens,
+        "temperature": temperature,
+    }).encode()
+
+    headers = {"Content-Type": "application/json"}
+    if api_key:
+        headers["Authorization"] = f"Bearer {api_key}"
+
+    req = Request(url, data=payload, headers=headers, method="POST")
+
+    try:
+        with urlopen(req, timeout=180) as resp:
+            result = json.loads(resp.read())
+        content = result["choices"][0]["message"]["content"]
+        if not content:
+            return "[Vision LLM returned empty response]"
+        return content
+    except (KeyError, IndexError, TypeError) as exc:
+        logger.warning("Vision LLM response has unexpected schema: %s", exc)
+        return "[Vision LLM analysis unavailable]"
+    except Exception as exc:
+        logger.warning("Vision LLM call failed: %s", exc)
+        return "[Vision LLM analysis unavailable]"
+
+
+def _encode_image_file(image_path: str) -> tuple[str, str]:
+    """Read an image file and return (base64_data, mime_type)."""
+    import base64
+    path = Path(image_path)
+    mime = mimetypes.guess_type(str(path))[0] or "image/png"
+    with open(path, "rb") as f:
+        data = base64.b64encode(f.read()).decode("ascii")
+    return data, mime
+
+
+def enhance_caption(item: dict, item_type: str, context: str = "") -> str:
+    """Use the appropriate LLM to generate an enhanced caption.
+
+    Images are sent to the Vision LLM with base64-encoded image data.
+    All other types use the text LLM.
+    """
     if item_type == "image":
+        img_path = item.get("img_path", item.get("image_path", ""))
+        captions = item.get("image_caption", "N/A")
+        footnotes = item.get("image_footnote", "N/A")
+
         prompt = (
-            f"Briefly describe this image content based on the available metadata.\n"
-            f"Image path: {item.get('img_path', item.get('image_path', 'N/A'))}\n"
-            f"Caption: {item.get('image_caption', 'N/A')}\n"
-            f"Footnote: {item.get('image_footnote', 'N/A')}\n"
-            f"Provide a concise analysis in 2-3 sentences."
+            "Please analyze this image in detail and provide a JSON response:\n"
+            '{"detailed_description": "comprehensive visual description",'
+            ' "entity_info": {"entity_name": "descriptive name",'
+            ' "entity_type": "image", "summary": "max 100 words"}}\n\n'
+            f"Image Path: {img_path}\n"
+            f"Captions: {captions}\nFootnotes: {footnotes}\n"
         )
+        if context:
+            prompt += f"\nContext from surrounding content:\n{context}\n"
+
+        # Try to send actual image to Vision LLM
+        if img_path and Path(img_path).exists():
+            try:
+                b64, mime = _encode_image_file(img_path)
+                return call_vlm(prompt, b64, image_mime=mime)
+            except Exception as exc:
+                logger.warning("Vision LLM failed for %s: %s — falling back to text LLM",
+                               img_path, exc)
+
+        # Fallback to text LLM if image not available
+        return call_llm(prompt, system_prompt="You are an expert image analyst.")
+
     elif item_type == "table":
         prompt = (
-            f"Analyze this table data:\n"
+            "Analyze this table content. Provide a JSON response:\n"
+            '{"detailed_description": "table structure, headers, data patterns, insights",'
+            ' "entity_info": {"entity_name": "name", "entity_type": "table",'
+            ' "summary": "max 100 words"}}\n\n'
             f"Caption: {item.get('table_caption', 'N/A')}\n"
             f"Body: {item.get('table_body', 'N/A')}\n"
-            f"Provide a concise summary of the table structure and key data in 2-3 sentences."
+            f"Footnotes: {item.get('table_footnote', 'N/A')}\n"
         )
+        if context:
+            prompt += f"\nContext:\n{context}\n"
+        return call_llm(prompt, system_prompt="You are an expert data analyst.")
+
     elif item_type == "equation":
         prompt = (
-            f"Explain this mathematical equation:\n"
+            "Analyze this equation. Provide a JSON response:\n"
+            '{"detailed_description": "meaning, variables, applications",'
+            ' "entity_info": {"entity_name": "name", "entity_type": "equation",'
+            ' "summary": "max 100 words"}}\n\n'
             f"Equation: {item.get('text', item.get('equation', 'N/A'))}\n"
             f"Format: {item.get('equation_format', 'latex')}\n"
-            f"Provide the mathematical meaning in 2-3 sentences."
         )
+        if context:
+            prompt += f"\nContext:\n{context}\n"
+        return call_llm(prompt, system_prompt="You are an expert mathematician.")
+
     else:
         prompt = (
-            f"Analyze this content of type '{item_type}':\n"
+            f"Analyze this {item_type} content:\n"
             f"{json.dumps(item, indent=2, default=str)}\n"
             f"Provide a concise description in 2-3 sentences."
         )
-
-    return call_llm(prompt, system_prompt="You are an expert content analyst.")
+        return call_llm(prompt, system_prompt="You are an expert content analyst.")
 
 
 # ---------------------------------------------------------------------------
