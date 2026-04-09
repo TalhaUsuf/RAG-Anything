@@ -1,0 +1,19 @@
+# Requirements for standalone_parsers/
+#
+# All HTTP calls use stdlib urllib — no requests/httpx needed.
+# All other imports (argparse, json, hashlib, subprocess, etc.) are stdlib.
+
+# -- Image format conversion (BMP, TIFF, GIF, WebP -> PNG) --
+# Used by: parser_images.py, parse_images.py
+#   Lazy import inside _convert_to_png() / convert_to_png()
+Pillow>=10.0.0
+
+# -- Text/HTML to PDF conversion via ReportLab --
+# Used by: parser_text.py, parse_text.py   (text/markdown -> PDF)
+#          parser_html.py, parse_html.py    (HTML fallback -> PDF)
+#   Lazy import inside _text_to_pdf() / convert_text_to_pdf()
+#   and _html_to_pdf_fallback()
+#   Submodules used: reportlab.lib.pagesizes, reportlab.lib.styles,
+#     reportlab.lib.units, reportlab.platypus, reportlab.pdfbase,
+#     reportlab.pdfbase.ttfonts
+reportlab>=4.0.0

@@ -17,7 +17,7 @@ MINERU_NATIVE_FORMATS = {".png", ".jpeg", ".jpg"}
 
 
 class ImageParser(BaseParser):
-    """Parse image files (.png/.jpg/.bmp/.tiff/.gif/.webp) via MinerU OCR."""
+    """Parse image files (.png/.jpg/.jpeg/.bmp/.tiff/.tif/.gif/.webp) via MinerU OCR."""
 
     def supported_formats(self) -> set[str]:
         return IMAGE_FORMATS
